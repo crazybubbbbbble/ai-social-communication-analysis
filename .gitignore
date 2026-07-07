@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# Third-party crawler checkout and local virtual environments.
+tools/MediaCrawler/
+tools/chrome-cdp-profile/
+.crawler_chrome_profile/
+
+# Generated crawler exports. Canonical raw templates stay under data/raw/*.csv.
+data/raw/mediacrawler/
+
+# Local logs and temporary files.
+*.log
+*.tmp
+reports/crawl_logs/
+reports/frontend_logs/
+visualization_app/node_modules/
+visualization_app/dist/
+visualization_app/*.png

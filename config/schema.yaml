@@ -1,0 +1,201 @@
+metadata:
+  project: "大学生使用生成式 AI 辅助人际沟通行为研究"
+  version: "0.1"
+  purpose: "统一数据字段 schema"
+
+raw_columns:
+  - post_id
+  - data_id
+  - platform
+  - keyword
+  - url
+  - publish_time
+  - crawl_time
+  - author_id_hash
+  - title
+  - text_raw
+  - like_count
+  - comment_count
+  - repost_or_share_count
+  - collect_count
+  - source_type
+  - is_repost
+  - remark
+
+clean_columns:
+  - post_id
+  - data_id
+  - platform
+  - keyword
+  - url
+  - publish_time
+  - crawl_time
+  - author_id_hash
+  - title
+  - text_raw
+  - text_clean
+  - like_count
+  - comment_count
+  - repost_or_share_count
+  - collect_count
+  - source_type
+  - is_repost
+  - is_ad
+  - relevance_score
+  - student_relevance_label
+  - delete_reason
+  - manual_check
+  - remark
+
+labeled_columns:
+  - post_id
+  - data_id
+  - platform
+  - keyword
+  - url
+  - publish_time
+  - crawl_time
+  - author_id_hash
+  - title
+  - text_raw
+  - text_clean
+  - like_count
+  - comment_count
+  - repost_or_share_count
+  - collect_count
+  - source_type
+  - is_repost
+  - is_ad
+  - relevance_score
+  - student_relevance_label
+  - primary_scene_label
+  - scene_labels
+  - relation_labels
+  - motivation_labels
+  - usage_labels
+  - attitude_label
+  - primary_risk_label
+  - risk_labels
+  - sentiment_label
+  - primary_topic_label
+  - topic_labels
+  - label_confidence
+  - delete_reason
+  - manual_check
+  - remark
+
+comment_raw_columns:
+  - comment_id
+  - parent_post_id
+  - parent_comment_id
+  - platform
+  - keyword
+  - url
+  - publish_time
+  - crawl_time
+  - author_id_hash
+  - comment_text_raw
+  - comment_level
+  - comment_rank
+  - comment_like_count
+  - comment_reply_count
+  - source_type
+  - remark
+
+comment_clean_columns:
+  - comment_id
+  - parent_post_id
+  - parent_comment_id
+  - platform
+  - keyword
+  - url
+  - publish_time
+  - crawl_time
+  - author_id_hash
+  - comment_text_raw
+  - comment_text_clean
+  - comment_level
+  - comment_rank
+  - comment_like_count
+  - comment_reply_count
+  - source_type
+  - is_ad
+  - relevance_score
+  - delete_reason
+  - manual_check
+  - remark
+
+comment_labeled_columns:
+  - comment_id
+  - parent_post_id
+  - parent_comment_id
+  - platform
+  - keyword
+  - url
+  - publish_time
+  - crawl_time
+  - author_id_hash
+  - comment_text_raw
+  - comment_text_clean
+  - comment_level
+  - comment_rank
+  - comment_like_count
+  - comment_reply_count
+  - source_type
+  - comment_role_label
+  - comment_attitude_to_post
+  - comment_topic_labels
+  - post_comment_consistency
+  - is_ad
+  - relevance_score
+  - delete_reason
+  - manual_check
+  - remark
+
+platform_values:
+  - weibo
+  - xhs
+  - zhihu
+  - wechat
+  - bilibili
+  - tieba
+  - douban
+
+source_type_values:
+  - post
+  - comment
+  - answer
+  - article
+
+comment_role_values:
+  - C1
+  - C2
+  - C3
+  - C4
+  - C5
+  - C6
+  - C7
+  - C8
+
+post_comment_consistency_values:
+  - PC1
+  - PC2
+  - PC3
+  - PC4
+  - PC5
+
+student_relevance_values:
+  - high
+  - medium
+  - low
+  - unclear
+
+delete_reason_values:
+  - ""
+  - ad
+  - irrelevant
+  - duplicate
+  - too_short
+  - no_opinion
+  - privacy_risk
+  - platform_noise

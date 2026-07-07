@@ -83,6 +83,9 @@ function useDashboardData() {
 function normalizePayload(payload) {
   const cleanRow = (row) => ({
     ...row,
+    rawName: row.name,
+    rawSource: row.source,
+    rawTarget: row.target,
     name: displayLabel(row.name),
     source: displayLabel(row.source),
     target: displayLabel(row.target),
@@ -414,6 +417,220 @@ function sankeyOption(rows) {
   };
 }
 
+const evidenceStageMeta = {
+  scene: { name: "场景入口", color: "#d98972", glow: "#f5d0c0", x: 42, width: 178 },
+  topic: { name: "讨论主题", color: "#75a7a1", glow: "#d5e7e3", x: 430, width: 238 },
+  risk: { name: "风险边界", color: "#9aad83", glow: "#dce8ce", x: 904, width: 174 },
+};
+
+function flowStage(value) {
+  const text = String(value || "");
+  if (text.startsWith("场景|")) return "scene";
+  if (text.startsWith("主题|")) return "topic";
+  if (text.startsWith("风险|")) return "risk";
+  return "topic";
+}
+
+function truncateLabel(label, limit = 12) {
+  return label.length > limit ? `${label.slice(0, limit)}…` : label;
+}
+
+function buildEvidenceFlow(rows) {
+  const edges = (rows || []).map((row) => ({
+    source: displayLabel(row.source),
+    target: displayLabel(row.target),
+    sourceStage: flowStage(row.rawSource || row.source),
+    targetStage: flowStage(row.rawTarget || row.target),
+    value: Number(row.value) || 0,
+  })).filter((row) => row.value > 0);
+
+  const sceneTopic = edges.filter((row) => row.sourceStage === "scene" && row.targetStage === "topic");
+  const topicRisk = edges.filter((row) => row.sourceStage === "topic" && row.targetStage === "risk");
+  const topicScores = new Map();
+  const sceneScores = new Map();
+  const riskScores = new Map();
+
+  sceneTopic.forEach((row) => {
+    topicScores.set(row.target, (topicScores.get(row.target) || 0) + row.value);
+    sceneScores.set(row.source, (sceneScores.get(row.source) || 0) + row.value);
+  });
+  topicRisk.forEach((row) => {
+    topicScores.set(row.source, (topicScores.get(row.source) || 0) + row.value);
+    riskScores.set(row.target, (riskScores.get(row.target) || 0) + row.value);
+  });
+
+  const topTopics = new Set([...topicScores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7).map(([name]) => name));
+  const topScenes = new Set([...sceneScores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name]) => name));
+  const topRisks = new Set([...riskScores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name]) => name));
+
+  const selectedLinks = [
+    ...sceneTopic.filter((row) => topScenes.has(row.source) && topTopics.has(row.target)).sort((a, b) => b.value - a.value).slice(0, 18),
+    ...topicRisk.filter((row) => topTopics.has(row.source) && topRisks.has(row.target)).sort((a, b) => b.value - a.value).slice(0, 18),
+  ];
+
+  const nodeTotals = new Map();
+  selectedLinks.forEach((link) => {
+    nodeTotals.set(`${link.sourceStage}:${link.source}`, (nodeTotals.get(`${link.sourceStage}:${link.source}`) || 0) + link.value);
+    nodeTotals.set(`${link.targetStage}:${link.target}`, (nodeTotals.get(`${link.targetStage}:${link.target}`) || 0) + link.value);
+  });
+
+  const makeNodes = (stage, names) => {
+    const meta = evidenceStageMeta[stage];
+    const sorted = [...names]
+      .map((name) => ({ id: `${stage}:${name}`, name, stage, value: nodeTotals.get(`${stage}:${name}`) || 0 }))
+      .filter((node) => node.value > 0)
+      .sort((a, b) => b.value - a.value);
+    const gap = sorted.length > 1 ? 304 / (sorted.length - 1) : 0;
+    return sorted.map((node, index) => ({
+      ...node,
+      x: meta.x,
+      y: 62 + index * gap,
+      width: meta.width,
+      height: 40 + Math.min(16, Math.sqrt(node.value) * 0.65),
+      color: meta.color,
+    }));
+  };
+
+  const sceneNames = new Set(selectedLinks.filter((link) => link.sourceStage === "scene").map((link) => link.source));
+  const topicNames = new Set(selectedLinks.flatMap((link) => [link.sourceStage === "topic" ? link.source : "", link.targetStage === "topic" ? link.target : ""]).filter(Boolean));
+  const riskNames = new Set(selectedLinks.filter((link) => link.targetStage === "risk").map((link) => link.target));
+  const nodes = [
+    ...makeNodes("scene", sceneNames),
+    ...makeNodes("topic", topicNames),
+    ...makeNodes("risk", riskNames),
+  ];
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const maxValue = Math.max(...selectedLinks.map((link) => link.value), 1);
+
+  const sourceRanks = new Map();
+  const targetRanks = new Map();
+  selectedLinks.forEach((link) => {
+    const sourceId = `${link.sourceStage}:${link.source}`;
+    const targetId = `${link.targetStage}:${link.target}`;
+    sourceRanks.set(sourceId, [...(sourceRanks.get(sourceId) || []), link]);
+    targetRanks.set(targetId, [...(targetRanks.get(targetId) || []), link]);
+  });
+
+  const links = selectedLinks.map((link, index) => {
+    const sourceId = `${link.sourceStage}:${link.source}`;
+    const targetId = `${link.targetStage}:${link.target}`;
+    const source = nodeById.get(sourceId);
+    const target = nodeById.get(targetId);
+    const sourceGroup = sourceRanks.get(sourceId) || [];
+    const targetGroup = targetRanks.get(targetId) || [];
+    const sourceOffset = (sourceGroup.indexOf(link) - (sourceGroup.length - 1) / 2) * 4.2;
+    const targetOffset = (targetGroup.indexOf(link) - (targetGroup.length - 1) / 2) * 4.2;
+    return {
+      ...link,
+      id: `flow-${index}`,
+      sourceId,
+      targetId,
+      x1: source.x + source.width,
+      y1: source.y + source.height / 2 + sourceOffset,
+      x2: target.x,
+      y2: target.y + target.height / 2 + targetOffset,
+      width: 1.4 + Math.sqrt(link.value / maxValue) * 22,
+      gradientId: `evidenceGradient${index}`,
+      sourceColor: evidenceStageMeta[link.sourceStage].color,
+      targetColor: evidenceStageMeta[link.targetStage].color,
+      label: `${link.source} → ${link.target}`,
+    };
+  }).filter((link) => Number.isFinite(link.x1) && Number.isFinite(link.x2));
+
+  const highlights = links
+    .filter((link) => link.sourceStage === "scene")
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 3);
+
+  return { nodes, links: links.sort((a, b) => a.value - b.value), maxValue, highlights };
+}
+
+function EvidenceFlow({ rows }) {
+  const [hovered, setHovered] = useState(null);
+  const flow = useMemo(() => buildEvidenceFlow(rows), [rows]);
+  const isFocused = (link) => {
+    if (!hovered) return true;
+    if (hovered.kind === "link") return hovered.id === link.id;
+    return hovered.id === link.sourceId || hovered.id === link.targetId;
+  };
+
+  return (
+    <div className="evidence-flow">
+      <svg viewBox="0 0 1120 430" role="img" aria-label="场景、主题与风险之间的证据流向">
+        <defs>
+          <filter id="evidenceSoftGlow" x="-20%" y="-60%" width="140%" height="220%">
+            <feGaussianBlur stdDeviation="7" result="blur" />
+            <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .36 0" result="glow" />
+            <feMerge>
+              <feMergeNode in="glow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          {flow.links.map((link) => (
+            <linearGradient key={link.gradientId} id={link.gradientId} x1={link.x1} y1={link.y1} x2={link.x2} y2={link.y2} gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor={link.sourceColor} stopOpacity="0.62" />
+              <stop offset="100%" stopColor={link.targetColor} stopOpacity="0.46" />
+            </linearGradient>
+          ))}
+        </defs>
+        <rect className="evidence-stage-bg" x="18" y="30" width="1084" height="356" rx="28" />
+        {Object.entries(evidenceStageMeta).map(([stage, meta]) => (
+          <g key={stage}>
+            <text className="evidence-stage-label" x={meta.x} y="34">{meta.name}</text>
+            <line className="evidence-stage-line" x1={meta.x + meta.width / 2} y1="48" x2={meta.x + meta.width / 2} y2="382" />
+          </g>
+        ))}
+        {flow.links.map((link) => {
+          const active = isFocused(link);
+          const d = `M ${link.x1} ${link.y1} C ${link.x1 + 118} ${link.y1}, ${link.x2 - 118} ${link.y2}, ${link.x2} ${link.y2}`;
+          return (
+            <path
+              key={link.id}
+              className={`evidence-link ${active ? "active" : "dimmed"}`}
+              d={d}
+              stroke={`url(#${link.gradientId})`}
+              strokeWidth={link.width}
+              onMouseEnter={() => setHovered({ ...link, kind: "link" })}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <title>{`${link.label}：${link.value} 条`}</title>
+            </path>
+          );
+        })}
+        {flow.nodes.map((node) => {
+          const active = !hovered || hovered.id === node.id || flow.links.some((link) => isFocused(link) && (link.sourceId === node.id || link.targetId === node.id));
+          return (
+            <g
+              key={node.id}
+              className={`evidence-node ${active ? "active" : "dimmed"}`}
+              transform={`translate(${node.x} ${node.y})`}
+              onMouseEnter={() => setHovered({ ...node, kind: "node" })}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <rect className="evidence-node-glow" x="-8" y="-8" width={node.width + 16} height={node.height + 16} rx="20" fill={evidenceStageMeta[node.stage].glow} />
+              <rect width={node.width} height={node.height} rx="16" fill="#fffdfa" stroke={node.color} />
+              <circle cx="18" cy={node.height / 2} r="5" fill={node.color} />
+              <text className="evidence-node-title" x="32" y={node.height / 2 - 2}>{truncateLabel(node.name, node.stage === "topic" ? 15 : 10)}</text>
+              <text className="evidence-node-count" x="32" y={node.height / 2 + 15}>{node.value.toLocaleString()} 条证据</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="evidence-flow-footer">
+        <div>
+          <strong>{hovered ? hovered.label || hovered.name : "三段式证据链"}</strong>
+          <span>{hovered ? `${hovered.value.toLocaleString()} 条相关样本` : "从使用场景进入讨论主题，再落到风险边界。悬浮节点或路径查看重点关联。"}</span>
+        </div>
+        <div className="evidence-flow-chips">
+          {flow.highlights.map((link) => (
+            <span key={link.id}>{truncateLabel(link.source, 6)} → {truncateLabel(link.target, 8)}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function graphOption(rows) {
   const nodes = [...new Set(rows.flatMap((row) => [row.source, row.target]))].map((name, index) => ({
     name,
@@ -731,7 +948,7 @@ function OverviewSection({ data, derived }) {
     <SectionFrame id="overview" label="数据总览" title="先确认样本结构，再解释图表结论" text="总览区把数据体量、来源结构、时间趋势、主题风险和关键词放在一起，避免只看单一图形造成误读。">
       <div className="chart-grid">
         <ChartPanel title="证据流向" unit="条" range="当前筛选" insight="场景、主题和风险的连接决定后续解释路径。" wide tall>
-          <EChart option={sankeyOption(data.flows.sankey)} className="large" />
+          <EvidenceFlow rows={data.flows.sankey} />
         </ChartPanel>
         <ChartPanel title="讨论时间趋势" unit="帖子数" range="按月份" insight="时间线用于判断讨论是否集中爆发。">
           <EChart option={timelineOption(derived.timeline)} />

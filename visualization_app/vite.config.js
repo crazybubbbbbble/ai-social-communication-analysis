@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  base: "/ai-social-communication-lens/",
+  base: "/ai-social-communication-analysis/",
   plugins: [react()],
   server: {
     host: "127.0.0.1",

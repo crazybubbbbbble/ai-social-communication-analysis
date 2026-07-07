@@ -1,19 +1,19 @@
-# AI Social Communication Lens
+# AI Social Communication Analysis
 
-An interactive data visualization website for exploring how young people discuss and use generative AI in everyday interpersonal communication, including messaging, relationship advice, apology and refusal scripts, privacy concerns, and AI-assisted chatting.
+A lightweight, interactive dashboard exploring how young people use and debate generative AI in everyday social communication.
 
 ## Live Site
 
 GitHub Pages will publish the dashboard at:
 
-`https://crazybubbbbbble.github.io/ai-social-communication-lens/`
+`https://crazybubbbbbble.github.io/ai-social-communication-analysis/`
 
-## What This Project Shows
+## Highlights
 
-- Platform-level overview for Weibo and Xiaohongshu data.
-- Trends, category comparisons, keyword bubbles, risk boundaries, and high-interaction cases.
-- Comment analysis linked to public attitudes such as support, concern, questioning, jokes, and practical suggestions.
-- An interactive visual dashboard built for a production internship project on AI application scenarios.
+- Weibo and Xiaohongshu discussions about AI-assisted messaging, relationship advice, apology/refusal scripts, and AI "voice replacement".
+- Post-comment linked analysis for support, concern, disagreement, jokes, follow-up questions, and practical suggestions.
+- Interactive trend views, category comparisons, keyword bubbles, risk boundaries, case library, and comment controversy visualization.
+- A complete project pipeline from crawling and cleaning to labeling, statistics, and dashboard deployment.
 
 ## Repository Structure
 
@@ -29,7 +29,7 @@ reports/             Progress notes and reviewed case outputs
 visualization_app/   React + Vite interactive dashboard
 ```
 
-The crawler pipeline uses MediaCrawler as the main collector, but the third-party checkout, local browser profile, virtual environments, and crawler cache snapshots are intentionally excluded from this repository.
+The crawler pipeline uses MediaCrawler as the main collector. Third-party checkouts, local browser profiles, virtual environments, and crawler cache snapshots are intentionally excluded.
 
 ## Current Dataset Snapshot
 
@@ -71,4 +71,4 @@ The static build output is generated in `visualization_app/dist`.
 
 ## Notes
 
-This repository publishes the crawler configuration, reproducible processing scripts, aggregated raw CSV tables, cleaned data, statistics, and the interactive dashboard. It does not publish browser login state, local crawler caches, third-party dependency folders, or virtual environments.
+This repository publishes the crawler configuration, processing scripts, aggregated raw CSV tables, cleaned data, statistics, and dashboard source. It does not publish browser login state, local crawler caches, third-party dependency folders, or virtual environments.

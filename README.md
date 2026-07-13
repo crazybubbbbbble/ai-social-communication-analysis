@@ -1,56 +1,81 @@
-# AI Social Communication Analysis
+<div align="center">
 
-A lightweight, interactive dashboard exploring how young people use and debate generative AI in everyday social communication.
+# AI Social Communication Lens
 
-## Live Site
+### How young people use generative AI to speak, connect, and negotiate authenticity
 
-GitHub Pages will publish the dashboard at:
+An end-to-end social text research project combining public-data collection,<br>
+post-comment linked analysis, interpretable labeling, and an interactive narrative dashboard.
 
-`https://crazybubbbbbble.github.io/ai-social-communication-analysis/`
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Explore_the_Research-304CFF?style=for-the-badge)](https://crazybubbbbbble.github.io/ai-social-communication-analysis/)
+[![Deploy](https://img.shields.io/github/actions/workflow/status/crazybubbbbbble/ai-social-communication-analysis/deploy-pages.yml?style=for-the-badge&label=Dashboard)](https://github.com/crazybubbbbbble/ai-social-communication-analysis/actions/workflows/deploy-pages.yml)
+[![License](https://img.shields.io/github/license/crazybubbbbbble/ai-social-communication-analysis?style=for-the-badge)](LICENSE)
 
-## Highlights
+</div>
 
-- Weibo and Xiaohongshu discussions about AI-assisted messaging, relationship advice, apology/refusal scripts, and AI "voice replacement".
-- Post-comment linked analysis for support, concern, disagreement, jokes, follow-up questions, and practical suggestions.
-- Interactive trend views, category comparisons, keyword bubbles, risk boundaries, case library, and comment controversy visualization.
-- A complete project pipeline from crawling and cleaning to labeling, statistics, and dashboard deployment.
+---
 
-## Repository Structure
+## What This Project Studies
 
-```text
-config/              Keyword lists and label dictionaries
-scripts/             Crawling, import, cleaning, labeling, statistics, and export scripts
-data/raw/            Aggregated raw CSV tables exported from crawler results
-data/clean/          Cleaned and labeled post/comment tables
-data/stats/          Analysis-ready summary tables
-figures/             Static analysis figures generated during exploration
-docs/                Supporting notes and data dictionaries
-reports/             Progress notes and reviewed case outputs
-visualization_app/   React + Vite interactive dashboard
+Generative AI is becoming a quiet participant in everyday communication: drafting replies, interpreting relationships, softening refusals, composing apologies, and reshaping emotional expression.
+
+This project examines not only **what people post**, but also **how comment sections respond**. Posts and comments remain linked so that support, concern, disagreement, humor, follow-up questions, and practical advice can be studied as one discussion structure.
+
+> The central question is not simply whether people use AI to communicate, but where assistance ends and authorship, authenticity, privacy, and dependence begin.
+
+## Dataset Snapshot
+
+<div align="center">
+
+| Public source records | Analysis-ready records | Platforms | Data relationship |
+|:---:|:---:|:---:|:---:|
+| **4,545** posts · **18,275** comments | **2,052** posts · **6,354** comments | Weibo · Xiaohongshu | Post ↔ Comment |
+
+</div>
+
+The dashboard currently presents the cleaned, source-filtered dataset generated on **2026-07-06**.
+
+## Explore the Evidence
+
+- **Communication scenes** — relationship advice, reply assistance, emotional expression, formal communication, and companionship.
+- **Motivations and strategies** — uncertainty reduction, emotional support, expressive improvement, chat-record upload, and role-play.
+- **Risk boundaries** — privacy leakage, authenticity loss, templated “AI tone”, dependence, ethical concerns, and relationship misjudgment.
+- **Comment controversy** — how public discussion supports, questions, jokes about, or warns against AI-assisted communication.
+- **Evidence archive** — searchable, sortable, and traceable posts and comments instead of chart-only conclusions.
+
+## Research Pipeline
+
+```mermaid
+flowchart LR
+    A[Public platform data] --> B[Collection and import]
+    B --> C[Cleaning and deduplication]
+    C --> D[Rule-based labeling]
+    D --> E[Post-comment linkage]
+    E --> F[Statistics and review]
+    F --> G[Interactive dashboard]
 ```
 
-The crawler pipeline uses MediaCrawler as the main collector. Third-party checkouts, local browser profiles, virtual environments, and crawler cache snapshots are intentionally excluded.
+MediaCrawler is used as the primary collector. The repository keeps the reproducible configuration and processing pipeline while excluding login sessions, browser profiles, dependency checkouts, and crawler caches.
 
-## Current Dataset Snapshot
+## Project Structure
 
-- Effective posts after cleaning: 2,069
-- Effective comments after cleaning: 7,254
-- Dashboard records after source filtering: 2,052 posts and 6,354 comments
-- Platforms used in the dashboard: Weibo and Xiaohongshu
+```text
+config/              Keywords, schemas, and label dictionaries
+scripts/             Collection, cleaning, labeling, statistics, and export
+data/raw/            Aggregated crawler exports
+data/clean/          Cleaned and labeled post/comment tables
+data/stats/          Analysis-ready statistical tables
+figures/             Static figures used during validation
+reports/             Progress notes and reviewed evidence
+docs/                Runbooks and supporting documentation
+visualization_app/   React + Vite interactive research dashboard
+```
 
-The public dashboard uses the processed visualization dataset in `visualization_app/public/data/dashboard.json`.
+## Built With
 
-## Tech Stack
+`React` · `Vite` · `ECharts` · `D3.js` · `Three.js` · `GSAP` · `Python` · `MediaCrawler`
 
-- React
-- Vite
-- ECharts
-- D3
-- Three.js / 3D Force Graph
-- GSAP
-- GitHub Pages
-
-## Local Development
+## Run Locally
 
 ```bash
 cd visualization_app
@@ -58,17 +83,21 @@ npm install
 npm run dev
 ```
 
-Then open the local URL printed by Vite.
-
-## Build
+Build and verify the production bundle:
 
 ```bash
-cd visualization_app
+npm run test:selectors
 npm run build
 ```
 
-The static build output is generated in `visualization_app/dist`.
+The dashboard reads its processed dataset from [`visualization_app/public/data/dashboard.json`](visualization_app/public/data/dashboard.json).
 
-## Notes
+## Data Scope
 
-This repository publishes the crawler configuration, processing scripts, aggregated raw CSV tables, cleaned data, statistics, and dashboard source. It does not publish browser login state, local crawler caches, third-party dependency folders, or virtual environments.
+The analysis uses publicly available platform content for academic research. Results describe the collected sample rather than all young people or all platform users. Raw findings should be interpreted alongside platform differences, keyword sampling, missing context, and automated-label uncertainty.
+
+Browser login state, local profiles, virtual environments, third-party source checkouts, and cache snapshots are intentionally excluded from version control.
+
+## License
+
+Code in this repository is released under the [MIT License](LICENSE). Platform content remains subject to its original source and platform terms.

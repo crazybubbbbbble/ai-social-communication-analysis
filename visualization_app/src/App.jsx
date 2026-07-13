@@ -4,6 +4,7 @@ import * as d3 from "d3";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
+import NarrativeExperience from "./narrative/NarrativeExperience";
 import {
   ArrowDownToLine,
   ArrowUpDown,
@@ -23,24 +24,29 @@ import {
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
 const colors = {
-  ink: "#262320",
-  muted: "#69625b",
-  faint: "#958c83",
-  accent: "#de7d53",
-  accentSoft: "#ffe5d7",
-  line: "#e5e0da",
-  panel: "#ffffff",
-  page: "#f8f7f4",
-  blue: "#6f9fb7",
-  green: "#91ad87",
-  purple: "#a996c7",
-  amber: "#d7ad5f",
+  ink: "#121412",
+  muted: "#6f726b",
+  faint: "#8a8c84",
+  accent: "#3047ff",
+  accentSoft: "#e7eaff",
+  line: "#d3cec2",
+  panel: "#fffdf8",
+  page: "#f3efe5",
+  blue: "#3047ff",
+  green: "#91b940",
+  purple: "#81759b",
+  amber: "#ef684f",
+  neutral: "#9a978f",
 };
 
-const chartPalette = ["#de7d53", "#6f9fb7", "#91ad87", "#a996c7", "#d7ad5f", "#d78aa6", "#837d76", "#b8c7a5"];
+const chartPalette = [colors.accent, colors.amber, colors.green, colors.purple, colors.neutral];
 const pageSize = 12;
 const EDGE_DISCUSSION_LABEL = "边缘讨论";
 const LOW_SIGNAL_LABELS = new Set(["低信号评论", "低信号归并", "未标注", "无法判断"]);
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString("zh-CN");
+}
 
 function removeCode(value) {
   return String(value || "")
@@ -56,11 +62,21 @@ function displayLabel(value, fallback = EDGE_DISCUSSION_LABEL) {
   return cleaned;
 }
 
+function semanticColor(label, index = 0) {
+  const text = String(label || "");
+  if (/风险|担忧|反对|质疑|隐私|依赖|不真诚/.test(text)) return colors.amber;
+  if (/支持|认同|接受|经验补充|方法建议/.test(text)) return colors.green;
+  if (/中性|调侃|边缘|其他|补充/.test(text)) return colors.purple;
+  return chartPalette[index % chartPalette.length];
+}
+
 function useDashboardData() {
   const [state, setState] = useState({ data: null, error: "" });
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setState({ data: null, error: "" });
     fetch(`${import.meta.env.BASE_URL}data/dashboard.json`)
       .then((response) => {
         if (!response.ok) throw new Error(`数据加载失败：${response.status}`);
@@ -75,9 +91,9 @@ function useDashboardData() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
 
-  return state;
+  return { ...state, retry: () => setAttempt((value) => value + 1) };
 }
 
 function normalizePayload(payload) {
@@ -127,6 +143,83 @@ function useReducedMotion() {
   }, []);
 
   return reduced;
+}
+
+function GenerativeField() {
+  const canvasRef = useRef(null);
+  const reduced = useReducedMotion();
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const context = canvas.getContext("2d", { alpha: true });
+    let frame = 0;
+    let width = 0;
+    let height = 0;
+    let particles = [];
+
+    const resize = () => {
+      const ratio = Math.min(window.devicePixelRatio || 1, 1.6);
+      width = canvas.clientWidth;
+      height = canvas.clientHeight;
+      canvas.width = Math.max(1, Math.floor(width * ratio));
+      canvas.height = Math.max(1, Math.floor(height * ratio));
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const count = Math.min(110, Math.max(48, Math.floor((width * height) / 15000)));
+      particles = Array.from({ length: count }, (_, index) => ({
+        x: ((index * 83) % 997) / 997 * width,
+        y: ((index * 149) % 991) / 991 * height,
+        age: (index * 17) % 120,
+        speed: 0.28 + (index % 7) * 0.035,
+      }));
+    };
+
+    const draw = (time = 0) => {
+      context.clearRect(0, 0, width, height);
+      context.lineCap = "round";
+      particles.forEach((particle, index) => {
+        const angle = Math.sin(particle.x * 0.006 + time * 0.00012) * 1.8
+          + Math.cos(particle.y * 0.008 - time * 0.00009) * 1.25;
+        if (!reduced) {
+          particle.x += Math.cos(angle) * particle.speed;
+          particle.y += Math.sin(angle) * particle.speed;
+          particle.age += 1;
+        }
+        const alpha = 0.08 + (index % 5) * 0.018;
+        context.strokeStyle = index % 4 === 0
+          ? `rgba(98, 215, 230, ${alpha})`
+          : `rgba(184, 240, 90, ${alpha})`;
+        context.lineWidth = index % 9 === 0 ? 1.2 : 0.7;
+        const trail = 7 + (index % 6) * 1.8;
+        context.beginPath();
+        context.moveTo(particle.x - Math.cos(angle) * trail, particle.y - Math.sin(angle) * trail);
+        context.lineTo(particle.x, particle.y);
+        context.stroke();
+        if (reduced && index % 3 === 0) {
+          context.fillStyle = index % 4 === 0 ? "rgba(98, 215, 230, .22)" : "rgba(184, 240, 90, .2)";
+          context.beginPath();
+          context.arc(particle.x, particle.y, index % 9 === 0 ? 1.5 : 1, 0, Math.PI * 2);
+          context.fill();
+        }
+        if (particle.x < -8 || particle.x > width + 8 || particle.y < -8 || particle.y > height + 8 || particle.age > 260) {
+          particle.x = (index * 71 + time * 0.01) % Math.max(width, 1);
+          particle.y = (index * 137) % Math.max(height, 1);
+          particle.age = 0;
+        }
+      });
+      if (!reduced) frame = requestAnimationFrame(draw);
+    };
+
+    resize();
+    draw();
+    window.addEventListener("resize", resize, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", resize);
+    };
+  }, [reduced]);
+
+  return <canvas ref={canvasRef} className="generative-field" aria-hidden="true" />;
 }
 
 function countBy(rows, field, limit = 12) {
@@ -210,7 +303,7 @@ function useDerived(data, filtered) {
         { label: "有效帖子", value: posts.length, unit: "条", note: "清洗后主文本", icon: BarChart3 },
         { label: "有效评论", value: comments.length, unit: "条", note: "保留评论区态度", icon: MessageSquareText },
         { label: "互动量", value: totalInteractions, unit: "次", note: "赞评转藏合计", icon: Sparkles },
-        { label: "明确信号", value: commentSignalRate, unit: "%", note: "评论中可解释信号比例", icon: CircleDot },
+        { label: "明确信号", value: commentSignalRate, unit: "%", note: `${signalComments.length.toLocaleString()} / ${comments.length.toLocaleString()} 条评论作用明确`, icon: CircleDot },
       ],
       platform: countBy(posts, "platformName", 6),
       scene: countBy(posts, "scene", 8),
@@ -268,18 +361,21 @@ function useDerived(data, filtered) {
 
 function baseTooltip() {
   return {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.panel,
     borderColor: colors.line,
-    textStyle: { color: colors.ink, fontFamily: "Inter, system-ui, sans-serif" },
-    extraCssText: "box-shadow: 0 18px 44px rgba(38,35,32,.12); border-radius: 12px;",
+    borderWidth: 1,
+    padding: [10, 12],
+    textStyle: { color: colors.ink, fontFamily: '"Noto Sans SC", "Microsoft YaHei", sans-serif', fontSize: 12, lineHeight: 20 },
+    extraCssText: "box-shadow: 0 12px 30px rgba(18,20,18,.10); border-radius: 2px;",
   };
 }
 
 function axis() {
   return {
-    axisLabel: { color: colors.muted, fontSize: 11 },
-    axisLine: { lineStyle: { color: "#e7e1da" } },
-    splitLine: { lineStyle: { color: "#efebe6" } },
+    axisLabel: { color: colors.muted, fontSize: 11, fontFamily: '"Cascadia Mono", Consolas, monospace' },
+    axisLine: { lineStyle: { color: "rgba(18, 20, 18, .28)", width: 1 } },
+    axisTick: { lineStyle: { color: "rgba(18, 20, 18, .18)" } },
+    splitLine: { lineStyle: { color: "rgba(18, 20, 18, .08)", type: "dashed" } },
   };
 }
 
@@ -294,25 +390,41 @@ function barOption(rows, unit = "条") {
     series: [{
       type: "bar",
       data: list.map((row) => row.count),
-      barWidth: 14,
-      itemStyle: { borderRadius: 6, color: colors.accent },
-      label: { show: true, position: "right", color: colors.muted, fontSize: 10, formatter: `{c} ${unit}` },
+      barWidth: 11,
+      itemStyle: { color: colors.accent },
+      emphasis: { itemStyle: { color: colors.amber } },
+      label: { show: true, position: "right", color: colors.ink, fontSize: 10, fontFamily: '"Cascadia Mono", Consolas, monospace', formatter: `{c} ${unit}` },
     }],
   };
 }
 
-function donutOption(rows) {
+function donutOption(rows, { centeredTotal = false } = {}) {
+  const total = rows.reduce((sum, row) => sum + row.count, 0);
   return {
     color: chartPalette,
     tooltip: { ...baseTooltip(), trigger: "item" },
-    legend: { bottom: 0, textStyle: { color: colors.muted, fontSize: 11 } },
+    title: centeredTotal ? {
+      text: total.toLocaleString(),
+      subtext: "篇帖子",
+      left: "center",
+      top: "32%",
+      textAlign: "center",
+      textStyle: { color: colors.ink, fontSize: 22, fontWeight: 650, fontFamily: '"Cascadia Mono", Consolas, monospace' },
+      subtextStyle: { color: colors.muted, fontSize: 10, lineHeight: 18 },
+    } : undefined,
+    legend: { bottom: 0, icon: "circle", itemWidth: 7, itemHeight: 7, textStyle: { color: colors.muted, fontSize: 11 } },
     series: [{
       type: "pie",
-      radius: ["50%", "72%"],
-      center: ["50%", "42%"],
-      label: { color: colors.ink, formatter: "{b}\n{d}%" },
-      itemStyle: { borderColor: "#fff", borderWidth: 3 },
-      data: rows.map((row) => ({ name: row.name, value: row.count })),
+      radius: ["57%", "73%"],
+      center: ["50%", "41%"],
+      label: centeredTotal ? { show: false } : { color: colors.ink, fontSize: 11, formatter: "{b}  {d}%" },
+      labelLine: { lineStyle: { color: colors.line } },
+      itemStyle: { borderColor: colors.panel, borderWidth: 2 },
+      data: rows.map((row, index) => ({
+        name: row.name,
+        value: row.count,
+        itemStyle: { color: semanticColor(row.name, index) },
+      })),
     }],
   };
 }
@@ -327,10 +439,14 @@ function roseOption(rows) {
       radius: [12, "57%"],
       center: ["50%", "39%"],
       roseType: "area",
-      itemStyle: { borderRadius: 6, borderColor: "#fff", borderWidth: 2 },
+      itemStyle: { borderColor: colors.panel, borderWidth: 2 },
       label: { color: colors.ink, fontSize: 10, width: 70, overflow: "truncate" },
       labelLine: { length: 10, length2: 8 },
-      data: rows.map((row) => ({ name: row.name, value: row.count })),
+      data: rows.map((row, index) => ({
+        name: row.name,
+        value: row.count,
+        itemStyle: { color: semanticColor(row.name, index) },
+      })),
     }],
   };
 }
@@ -338,23 +454,27 @@ function roseOption(rows) {
 function radarOption(rows) {
   const list = rows.slice(0, 7);
   const max = Math.max(...list.map((row) => row.count), 1);
+  const step = max > 500 ? 100 : max > 100 ? 50 : max > 20 ? 10 : 5;
+  const scaleMax = Math.ceil(max / step) * step;
   return {
     color: [colors.blue],
     tooltip: baseTooltip(),
     radar: {
       radius: "68%",
-      indicator: list.map((row) => ({ name: row.name, max })),
+      splitNumber: 4,
+      indicator: list.map((row) => ({ name: row.name, max: scaleMax })),
       axisName: { color: colors.muted, fontSize: 11 },
-      splitLine: { lineStyle: { color: "#e9e2db" } },
-      splitArea: { areaStyle: { color: ["rgba(222,125,83,.04)", "rgba(111,159,183,.06)"] } },
-      axisLine: { lineStyle: { color: "#e9e2db" } },
+      splitLine: { lineStyle: { color: "rgba(18,20,18,.12)" } },
+      splitArea: { areaStyle: { color: ["rgba(48,71,255,.015)", "rgba(48,71,255,.04)"] } },
+      axisLine: { lineStyle: { color: "rgba(18,20,18,.16)" } },
     },
     series: [{
       type: "radar",
       data: [{ value: list.map((row) => row.count), name: "讨论强度" }],
-      areaStyle: { color: "rgba(111,159,183,.18)" },
-      lineStyle: { width: 2 },
-      symbolSize: 5,
+      areaStyle: { color: "rgba(48,71,255,.12)" },
+      lineStyle: { width: 1.5, color: colors.accent },
+      itemStyle: { color: colors.panel, borderColor: colors.accent, borderWidth: 2 },
+      symbolSize: 6,
     }],
   };
 }
@@ -369,9 +489,11 @@ function timelineOption(rows) {
     series: [{
       type: "line",
       smooth: true,
-      symbolSize: 7,
-      areaStyle: { color: "rgba(222,125,83,.13)" },
-      lineStyle: { width: 3 },
+      symbolSize: 6,
+      symbol: "circle",
+      itemStyle: { color: colors.panel, borderColor: colors.accent, borderWidth: 2 },
+      areaStyle: { color: "rgba(48,71,255,.07)" },
+      lineStyle: { width: 2, color: colors.accent },
       data: rows.map((row) => row.count),
     }],
   };
@@ -385,12 +507,12 @@ function heatmapOption(rows) {
     grid: { left: 132, right: 24, top: 24, bottom: 84 },
     xAxis: { type: "category", data: targets, axisLabel: { color: colors.muted, rotate: 32, fontSize: 10 }, axisLine: { show: false } },
     yAxis: { type: "category", data: sources, axisLabel: { color: colors.muted, fontSize: 10 }, axisLine: { show: false } },
-    visualMap: { show: false, min: 0, max: Math.max(...rows.map((row) => row.value), 1), inRange: { color: ["#f5efea", "#f2bf9d", "#de7d53"] } },
+    visualMap: { show: false, min: 0, max: Math.max(...rows.map((row) => row.value), 1), inRange: { color: ["#ebe7dc", "#b9c0ee", colors.accent] } },
     series: [{
       type: "heatmap",
       data: rows.map((row) => [targets.indexOf(row.target), sources.indexOf(row.source), row.value]),
       label: { show: true, color: colors.ink, fontSize: 10 },
-      itemStyle: { borderColor: "#fff", borderWidth: 1, borderRadius: 4 },
+      itemStyle: { borderColor: colors.panel, borderWidth: 1 },
     }],
   };
 }
@@ -417,13 +539,7 @@ function sankeyOption(rows) {
   };
 }
 
-const evidenceStageMeta = {
-  scene: { name: "场景入口", color: "#d98972", glow: "#f5d0c0", x: 42, width: 178 },
-  topic: { name: "讨论主题", color: "#75a7a1", glow: "#d5e7e3", x: 430, width: 238 },
-  risk: { name: "风险边界", color: "#9aad83", glow: "#dce8ce", x: 904, width: 174 },
-};
-
-function flowStage(value) {
+function evidenceStage(value) {
   const text = String(value || "");
   if (text.startsWith("场景|")) return "scene";
   if (text.startsWith("主题|")) return "topic";
@@ -431,201 +547,111 @@ function flowStage(value) {
   return "topic";
 }
 
-function truncateLabel(label, limit = 12) {
-  return label.length > limit ? `${label.slice(0, limit)}…` : label;
-}
-
-function buildEvidenceFlow(rows) {
+function buildEvidencePathways(rows) {
   const edges = (rows || []).map((row) => ({
     source: displayLabel(row.source),
     target: displayLabel(row.target),
-    sourceStage: flowStage(row.rawSource || row.source),
-    targetStage: flowStage(row.rawTarget || row.target),
+    sourceStage: evidenceStage(row.rawSource || row.source),
+    targetStage: evidenceStage(row.rawTarget || row.target),
     value: Number(row.value) || 0,
   })).filter((row) => row.value > 0);
 
   const sceneTopic = edges.filter((row) => row.sourceStage === "scene" && row.targetStage === "topic");
-  const topicRisk = edges.filter((row) => row.sourceStage === "topic" && row.targetStage === "risk");
-  const topicScores = new Map();
-  const sceneScores = new Map();
-  const riskScores = new Map();
-
-  sceneTopic.forEach((row) => {
-    topicScores.set(row.target, (topicScores.get(row.target) || 0) + row.value);
-    sceneScores.set(row.source, (sceneScores.get(row.source) || 0) + row.value);
-  });
-  topicRisk.forEach((row) => {
-    topicScores.set(row.source, (topicScores.get(row.source) || 0) + row.value);
-    riskScores.set(row.target, (riskScores.get(row.target) || 0) + row.value);
-  });
-
-  const topTopics = new Set([...topicScores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7).map(([name]) => name));
-  const topScenes = new Set([...sceneScores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name]) => name));
-  const topRisks = new Set([...riskScores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name]) => name));
-
-  const selectedLinks = [
-    ...sceneTopic.filter((row) => topScenes.has(row.source) && topTopics.has(row.target)).sort((a, b) => b.value - a.value).slice(0, 18),
-    ...topicRisk.filter((row) => topTopics.has(row.source) && topRisks.has(row.target)).sort((a, b) => b.value - a.value).slice(0, 18),
-  ];
-
-  const nodeTotals = new Map();
-  selectedLinks.forEach((link) => {
-    nodeTotals.set(`${link.sourceStage}:${link.source}`, (nodeTotals.get(`${link.sourceStage}:${link.source}`) || 0) + link.value);
-    nodeTotals.set(`${link.targetStage}:${link.target}`, (nodeTotals.get(`${link.targetStage}:${link.target}`) || 0) + link.value);
-  });
-
-  const makeNodes = (stage, names) => {
-    const meta = evidenceStageMeta[stage];
-    const sorted = [...names]
-      .map((name) => ({ id: `${stage}:${name}`, name, stage, value: nodeTotals.get(`${stage}:${name}`) || 0 }))
-      .filter((node) => node.value > 0)
-      .sort((a, b) => b.value - a.value);
-    const gap = sorted.length > 1 ? 304 / (sorted.length - 1) : 0;
-    return sorted.map((node, index) => ({
-      ...node,
-      x: meta.x,
-      y: 62 + index * gap,
-      width: meta.width,
-      height: 40 + Math.min(16, Math.sqrt(node.value) * 0.65),
-      color: meta.color,
-    }));
+  const topicRisk = edges.filter((row) => row.sourceStage === "topic"
+    && row.targetStage === "risk"
+    && !/无明显风险|无风险/.test(row.target));
+  const topicMap = new Map();
+  const getTopic = (name) => {
+    if (!topicMap.has(name)) topicMap.set(name, { topic: name, scenes: [], risks: [] });
+    return topicMap.get(name);
   };
 
-  const sceneNames = new Set(selectedLinks.filter((link) => link.sourceStage === "scene").map((link) => link.source));
-  const topicNames = new Set(selectedLinks.flatMap((link) => [link.sourceStage === "topic" ? link.source : "", link.targetStage === "topic" ? link.target : ""]).filter(Boolean));
-  const riskNames = new Set(selectedLinks.filter((link) => link.targetStage === "risk").map((link) => link.target));
-  const nodes = [
-    ...makeNodes("scene", sceneNames),
-    ...makeNodes("topic", topicNames),
-    ...makeNodes("risk", riskNames),
-  ];
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const maxValue = Math.max(...selectedLinks.map((link) => link.value), 1);
+  sceneTopic.forEach((row) => getTopic(row.target).scenes.push({ name: row.source, value: row.value }));
+  topicRisk.forEach((row) => getTopic(row.source).risks.push({ name: row.target, value: row.value }));
 
-  const sourceRanks = new Map();
-  const targetRanks = new Map();
-  selectedLinks.forEach((link) => {
-    const sourceId = `${link.sourceStage}:${link.source}`;
-    const targetId = `${link.targetStage}:${link.target}`;
-    sourceRanks.set(sourceId, [...(sourceRanks.get(sourceId) || []), link]);
-    targetRanks.set(targetId, [...(targetRanks.get(targetId) || []), link]);
-  });
+  const pathways = [...topicMap.values()]
+    .filter((row) => row.scenes.length && row.risks.length)
+    .map((row) => {
+      const scenes = row.scenes.sort((a, b) => b.value - a.value);
+      const risks = row.risks.sort((a, b) => b.value - a.value);
+      return {
+        ...row,
+        id: `${row.topic}-${scenes[0].name}-${risks[0].name}`,
+        scenes,
+        risks,
+        sceneTotal: scenes.reduce((sum, item) => sum + item.value, 0),
+        riskTotal: risks.reduce((sum, item) => sum + item.value, 0),
+      };
+    })
+    .sort((a, b) => b.riskTotal - a.riskTotal || b.sceneTotal - a.sceneTotal)
+    .slice(0, 6);
 
-  const links = selectedLinks.map((link, index) => {
-    const sourceId = `${link.sourceStage}:${link.source}`;
-    const targetId = `${link.targetStage}:${link.target}`;
-    const source = nodeById.get(sourceId);
-    const target = nodeById.get(targetId);
-    const sourceGroup = sourceRanks.get(sourceId) || [];
-    const targetGroup = targetRanks.get(targetId) || [];
-    const sourceOffset = (sourceGroup.indexOf(link) - (sourceGroup.length - 1) / 2) * 4.2;
-    const targetOffset = (targetGroup.indexOf(link) - (targetGroup.length - 1) / 2) * 4.2;
-    return {
-      ...link,
-      id: `flow-${index}`,
-      sourceId,
-      targetId,
-      x1: source.x + source.width,
-      y1: source.y + source.height / 2 + sourceOffset,
-      x2: target.x,
-      y2: target.y + target.height / 2 + targetOffset,
-      width: 1.4 + Math.sqrt(link.value / maxValue) * 22,
-      gradientId: `evidenceGradient${index}`,
-      sourceColor: evidenceStageMeta[link.sourceStage].color,
-      targetColor: evidenceStageMeta[link.targetStage].color,
-      label: `${link.source} → ${link.target}`,
-    };
-  }).filter((link) => Number.isFinite(link.x1) && Number.isFinite(link.x2));
-
-  const highlights = links
-    .filter((link) => link.sourceStage === "scene")
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 3);
-
-  return { nodes, links: links.sort((a, b) => a.value - b.value), maxValue, highlights };
+  return {
+    pathways,
+    maxScene: Math.max(...pathways.map((row) => row.sceneTotal), 1),
+    maxRisk: Math.max(...pathways.map((row) => row.riskTotal), 1),
+  };
 }
 
-function EvidenceFlow({ rows }) {
+function EvidencePathways({ rows }) {
   const [hovered, setHovered] = useState(null);
-  const flow = useMemo(() => buildEvidenceFlow(rows), [rows]);
-  const isFocused = (link) => {
-    if (!hovered) return true;
-    if (hovered.kind === "link") return hovered.id === link.id;
-    return hovered.id === link.sourceId || hovered.id === link.targetId;
-  };
+  const [locked, setLocked] = useState(null);
+  const evidence = useMemo(() => buildEvidencePathways(rows), [rows]);
+  const selectedId = hovered || locked;
+  const selected = evidence.pathways.find((row) => row.id === selectedId) || evidence.pathways[0];
+
+  if (!evidence.pathways.length) {
+    return <div className="evidence-pathways-empty">当前筛选下没有足够的显性风险关联。</div>;
+  }
 
   return (
-    <div className="evidence-flow">
-      <svg viewBox="0 0 1120 430" role="img" aria-label="场景、主题与风险之间的证据流向">
-        <defs>
-          <filter id="evidenceSoftGlow" x="-20%" y="-60%" width="140%" height="220%">
-            <feGaussianBlur stdDeviation="7" result="blur" />
-            <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .36 0" result="glow" />
-            <feMerge>
-              <feMergeNode in="glow" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          {flow.links.map((link) => (
-            <linearGradient key={link.gradientId} id={link.gradientId} x1={link.x1} y1={link.y1} x2={link.x2} y2={link.y2} gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor={link.sourceColor} stopOpacity="0.62" />
-              <stop offset="100%" stopColor={link.targetColor} stopOpacity="0.46" />
-            </linearGradient>
-          ))}
-        </defs>
-        <rect className="evidence-stage-bg" x="18" y="30" width="1084" height="356" rx="28" />
-        {Object.entries(evidenceStageMeta).map(([stage, meta]) => (
-          <g key={stage}>
-            <text className="evidence-stage-label" x={meta.x} y="34">{meta.name}</text>
-            <line className="evidence-stage-line" x1={meta.x + meta.width / 2} y1="48" x2={meta.x + meta.width / 2} y2="382" />
-          </g>
-        ))}
-        {flow.links.map((link) => {
-          const active = isFocused(link);
-          const d = `M ${link.x1} ${link.y1} C ${link.x1 + 118} ${link.y1}, ${link.x2 - 118} ${link.y2}, ${link.x2} ${link.y2}`;
+    <div className="evidence-pathways">
+      <div className="evidence-pathway-head" aria-hidden="true">
+        <span><b>使用场景</b><small>表达需求从哪里发生</small></span>
+        <span><b>讨论主题</b><small>连接经验与争议的桥梁</small></span>
+        <span><b>显性风险</b><small>讨论最终触及的边界</small></span>
+      </div>
+      <div className="evidence-pathway-list" aria-label="场景、主题与显性风险关联路径">
+        {evidence.pathways.map((pathway, index) => {
+          const active = pathway.id === selectedId || (!selectedId && index === 0);
           return (
-            <path
-              key={link.id}
-              className={`evidence-link ${active ? "active" : "dimmed"}`}
-              d={d}
-              stroke={`url(#${link.gradientId})`}
-              strokeWidth={link.width}
-              onMouseEnter={() => setHovered({ ...link, kind: "link" })}
+            <button
+              type="button"
+              className={`evidence-pathway-row ${active ? "active" : ""}`}
+              key={pathway.id}
+              aria-pressed={locked === pathway.id}
+              onMouseEnter={() => setHovered(pathway.id)}
               onMouseLeave={() => setHovered(null)}
+              onFocus={() => setHovered(pathway.id)}
+              onBlur={() => setHovered(null)}
+              onClick={() => setLocked((current) => (current === pathway.id ? null : pathway.id))}
             >
-              <title>{`${link.label}：${link.value} 条`}</title>
-            </path>
+              <span className="evidence-pathway-rank">{String(index + 1).padStart(2, "0")}</span>
+              <span className="evidence-pathway-stage scene">
+                <strong>{pathway.scenes[0].name}</strong>
+                <small>{formatNumber(pathway.sceneTotal)} 次场景—主题共现</small>
+                <i><b style={{ width: `${(pathway.sceneTotal / evidence.maxScene) * 100}%` }} /></i>
+                {pathway.scenes[1] && <em>其次：{pathway.scenes[1].name}</em>}
+              </span>
+              <span className="evidence-pathway-stage topic">
+                <i aria-hidden="true" />
+                <strong>{pathway.topic}</strong>
+                <small>共享主题</small>
+              </span>
+              <span className="evidence-pathway-stage risk">
+                <strong>{pathway.risks[0].name}</strong>
+                <small>{formatNumber(pathway.riskTotal)} 次主题—风险共现</small>
+                <i><b style={{ width: `${(pathway.riskTotal / evidence.maxRisk) * 100}%` }} /></i>
+                {pathway.risks[1] && <em>其次：{pathway.risks[1].name}</em>}
+              </span>
+            </button>
           );
         })}
-        {flow.nodes.map((node) => {
-          const active = !hovered || hovered.id === node.id || flow.links.some((link) => isFocused(link) && (link.sourceId === node.id || link.targetId === node.id));
-          return (
-            <g
-              key={node.id}
-              className={`evidence-node ${active ? "active" : "dimmed"}`}
-              transform={`translate(${node.x} ${node.y})`}
-              onMouseEnter={() => setHovered({ ...node, kind: "node" })}
-              onMouseLeave={() => setHovered(null)}
-            >
-              <rect className="evidence-node-glow" x="-8" y="-8" width={node.width + 16} height={node.height + 16} rx="20" fill={evidenceStageMeta[node.stage].glow} />
-              <rect width={node.width} height={node.height} rx="16" fill="#fffdfa" stroke={node.color} />
-              <circle cx="18" cy={node.height / 2} r="5" fill={node.color} />
-              <text className="evidence-node-title" x="32" y={node.height / 2 - 2}>{truncateLabel(node.name, node.stage === "topic" ? 15 : 10)}</text>
-              <text className="evidence-node-count" x="32" y={node.height / 2 + 15}>{node.value.toLocaleString()} 条证据</text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="evidence-flow-footer">
-        <div>
-          <strong>{hovered ? hovered.label || hovered.name : "三段式证据链"}</strong>
-          <span>{hovered ? `${hovered.value.toLocaleString()} 条相关样本` : "从使用场景进入讨论主题，再落到风险边界。悬浮节点或路径查看重点关联。"}</span>
-        </div>
-        <div className="evidence-flow-chips">
-          {flow.highlights.map((link) => (
-            <span key={link.id}>{truncateLabel(link.source, 6)} → {truncateLabel(link.target, 8)}</span>
-          ))}
-        </div>
+      </div>
+      <div className="evidence-pathway-reading" aria-live="polite">
+        <span>当前路径</span>
+        <strong>{selected.scenes[0].name} → {selected.topic} → {selected.risks[0].name}</strong>
+        <small>左右数值分别统计“场景—主题”和“主题—风险”共现，不代表三者必然来自同一条文本。</small>
       </div>
     </div>
   );
@@ -635,7 +661,7 @@ function graphOption(rows) {
   const nodes = [...new Set(rows.flatMap((row) => [row.source, row.target]))].map((name, index) => ({
     name,
     symbolSize: 20 + Math.min(22, rows.filter((row) => row.source === name || row.target === name).length * 3),
-    itemStyle: { color: chartPalette[index % chartPalette.length] },
+    itemStyle: { color: semanticColor(name, index) },
   }));
   return {
     tooltip: baseTooltip(),
@@ -669,7 +695,7 @@ function treemapOption(rows) {
       breadcrumb: { show: false },
       label: { color: colors.ink, formatter: "{b}" },
       upperLabel: { show: true, height: 24, color: "#fff" },
-      itemStyle: { borderColor: "#fff", borderWidth: 2, gapWidth: 2 },
+      itemStyle: { borderColor: colors.panel, borderWidth: 2, gapWidth: 2 },
       data: [...groups.entries()].map(([name, children]) => ({ name, children, value: children.reduce((sum, item) => sum + item.value, 0) })),
     }],
   };
@@ -700,8 +726,8 @@ function scatterOption(rows, yField = "replies", yName = "回复") {
           symbolSize: 5 + Math.min(16, Math.sqrt(row.likes + (row[yField] || 0) * 2 + 1) * 1.05),
           raw: row,
         })),
-      itemStyle: { color: chartPalette[index % chartPalette.length], opacity: 0.58 },
-      emphasis: { itemStyle: { opacity: 0.9, borderColor: "#fff", borderWidth: 1.5 } },
+      itemStyle: { color: semanticColor(group, index), opacity: 0.5 },
+      emphasis: { itemStyle: { opacity: 0.9, borderColor: colors.ink, borderWidth: 1.5 } },
     })),
   };
 }
@@ -734,7 +760,7 @@ function buildBubbleNodes(rows) {
     label: removeCode(row.text),
     share: row.value / total,
     r: 13 + Math.sqrt(row.value / max) * 42,
-    color: chartPalette[index % chartPalette.length],
+    color: colors.accent,
   }));
   const simulation = d3.forceSimulation(nodes)
     .force("center", d3.forceCenter(width / 2, height / 2))
@@ -775,9 +801,20 @@ function BubbleCloud({ rows }) {
             <g
               key={node.id}
               className={`bubble-node ${isActive ? "" : "muted"} ${isHover ? "hovered" : ""}`}
+              role="button"
+              tabIndex="0"
+              aria-label={`${node.label}，出现 ${node.value} 次`}
               onMouseEnter={() => setHovered(node)}
               onMouseLeave={() => setHovered(null)}
+              onFocus={() => setHovered(node)}
+              onBlur={() => setHovered(null)}
               onClick={() => setActive((current) => (current === node.id ? null : node.id))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setActive((current) => (current === node.id ? null : node.id));
+                }
+              }}
             >
               <circle cx={node.x} cy={node.y} r={node.r} fill={node.color} stroke={node.color} />
               <circle className="bubble-ring" cx={node.x} cy={node.y} r={node.r + 4} stroke={node.color} />
@@ -837,15 +874,43 @@ function KpiCard({ item }) {
   );
 }
 
+function AnalysisBridge({ derived, onOpenAnalysis }) {
+  const signalRate = derived.comments.length
+    ? ((derived.signalComments.length / derived.comments.length) * 100).toFixed(1)
+    : "0.0";
+  return (
+    <section className="analysis-bridge" aria-labelledby="analysis-bridge-title">
+      <div className="bridge-orbit" aria-hidden="true">
+        <i className="bridge-line bridge-line-outer" />
+        <i className="bridge-line bridge-line-inner" />
+        <span />
+      </div>
+      <div className="bridge-copy">
+        <p>从六幕叙事进入可复核证据</p>
+        <h2 id="analysis-bridge-title">故事停在结论之前，<br />数据继续向下展开。</h2>
+        <button type="button" onClick={() => onOpenAnalysis("overview")}>
+          打开研究图版
+          <ArrowDownToLine size={16} />
+        </button>
+      </div>
+      <div className="bridge-stats" aria-label="当前研究样本">
+        <article className="bridge-stat"><span>有效帖子</span><strong>{formatNumber(derived.posts.length)}</strong><small>篇</small></article>
+        <article className="bridge-stat"><span>关联评论</span><strong>{formatNumber(derived.comments.length)}</strong><small>条</small></article>
+        <article className="bridge-stat"><span>明确信号</span><strong>{signalRate}</strong><small>%</small></article>
+      </div>
+    </section>
+  );
+}
+
 function ChartPanel({ title, unit, range, insight, children, wide = false, tall = false }) {
   return (
-    <section className={`chart-panel reveal-card ${wide ? "wide" : ""} ${tall ? "tall" : ""}`}>
+    <section className={`chart-panel chart-plate reveal-card ${wide ? "wide" : ""} ${tall ? "tall" : ""}`}>
       <header>
-        <div>
+        <div className="chart-copy">
           <h3>{title}</h3>
           <p>{insight}</p>
         </div>
-        <dl>
+        <dl className="chart-meta">
           <div><dt>单位</dt><dd>{unit}</dd></div>
           <div><dt>范围</dt><dd>{range}</dd></div>
         </dl>
@@ -855,10 +920,99 @@ function ChartPanel({ title, unit, range, insight, children, wide = false, tall 
   );
 }
 
-function FilterBar({ data, filters, setFilters, query, setQuery }) {
+function TopicRiskMatrix({ rows }) {
+  const [hovered, setHovered] = useState(null);
+  const [locked, setLocked] = useState(null);
+  const matrix = useMemo(() => {
+    const meaningful = rows.filter((row) => row.value > 0 && !/无明显风险|无风险/.test(displayLabel(row.target)));
+    const sourceRows = meaningful.length ? meaningful : rows.filter((row) => row.value > 0);
+    const topicTotals = new Map();
+    const riskTotals = new Map();
+    sourceRows.forEach((row) => {
+      const topic = displayLabel(row.source);
+      const risk = displayLabel(row.target);
+      topicTotals.set(topic, (topicTotals.get(topic) || 0) + row.value);
+      riskTotals.set(risk, (riskTotals.get(risk) || 0) + row.value);
+    });
+    const topics = [...topicTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+    const risks = [...riskTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+    const lookup = new Map(sourceRows.map((row) => [`${displayLabel(row.source)}|${displayLabel(row.target)}`, row.value]));
+    const cells = risks.flatMap((risk, riskIndex) => topics.map((topic) => ({
+      id: `${topic}|${risk}`,
+      topic,
+      risk,
+      riskIndex,
+      value: lookup.get(`${topic}|${risk}`) || 0,
+    })));
+    const max = Math.max(...cells.map((cell) => cell.value), 1);
+    const top = cells.reduce((best, cell) => (cell.value > best.value ? cell : best), cells[0] || { value: 0 });
+    return { topics, risks, cells, max, top };
+  }, [rows]);
+
+  if (!matrix.topics.length || !matrix.risks.length) {
+    return <EmptyState title="暂无显性风险共现" text="当前筛选下没有足够的主题—风险关联。" />;
+  }
+
+  const active = hovered || locked || matrix.top;
+  return (
+    <div className="topic-risk-matrix">
+      <div className="risk-matrix-grid" style={{ "--topic-columns": matrix.topics.length }}>
+        <div className="risk-matrix-corner">风险 / 主题</div>
+        {matrix.topics.map((topic) => <div className="risk-matrix-topic" key={topic}>{topic}</div>)}
+        {matrix.risks.map((risk, riskIndex) => (
+          <React.Fragment key={risk}>
+            <div className="risk-matrix-risk">
+              <i style={{ background: chartPalette[(riskIndex + 1) % chartPalette.length] }} />
+              <span>{risk}</span>
+            </div>
+            {matrix.cells.filter((cell) => cell.risk === risk).map((cell) => {
+              const size = 16 + Math.sqrt(cell.value / matrix.max) * 40;
+              const activeCell = active?.id === cell.id;
+              return (
+                <button
+                  type="button"
+                  className={activeCell ? "active" : ""}
+                  key={cell.id}
+                  aria-label={`${cell.topic}与${cell.risk}共现 ${cell.value} 次`}
+                  aria-pressed={locked?.id === cell.id}
+                  onMouseEnter={() => setHovered(cell)}
+                  onMouseLeave={() => setHovered(null)}
+                  onFocus={() => setHovered(cell)}
+                  onBlur={() => setHovered(null)}
+                  onClick={() => setLocked((current) => current?.id === cell.id ? null : cell)}
+                >
+                  {cell.value > 0 && (
+                    <i
+                      className="risk-matrix-dot"
+                      style={{
+                        "--dot-size": `${size}px`,
+                        "--risk-color": chartPalette[(cell.riskIndex + 1) % chartPalette.length],
+                      }}
+                    >
+                      <b>{cell.value}</b>
+                    </i>
+                  )}
+                </button>
+              );
+            })}
+          </React.Fragment>
+        ))}
+      </div>
+      <div className="risk-matrix-reading" aria-live="polite">
+        <span>当前关联</span>
+        <strong>{active.topic} × {active.risk}</strong>
+        <b>{formatNumber(active.value)} 次共现</b>
+        <p>圆点面积表示同一帖子中主题与显性风险标签同时出现的次数。</p>
+      </div>
+    </div>
+  );
+}
+
+function FilterBar({ data, derived, filters, setFilters, query, setQuery }) {
   const topicOptions = [...new Set(data.records.posts.map((row) => row.topic).filter(Boolean))].sort();
   const sceneOptions = [...new Set(data.records.posts.map((row) => row.scene).filter(Boolean))].sort();
   const riskOptions = [...new Set(data.records.posts.map((row) => row.risk).filter(Boolean))].sort();
+  const activeFilterCount = Object.values(filters).filter((value) => value !== "all").length + (query.trim() ? 1 : 0);
   const update = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
   return (
     <section className="filter-bar" aria-label="筛选条件">
@@ -874,6 +1028,11 @@ function FilterBar({ data, filters, setFilters, query, setQuery }) {
         <Filter size={16} />
         重置
       </button>
+      <div className="filter-summary" aria-live="polite">
+        <span>当前观察范围</span>
+        <strong>{formatNumber(derived.posts.length)} 篇帖子 · {formatNumber(derived.comments.length)} 条评论</strong>
+        <small>{activeFilterCount ? `已启用 ${activeFilterCount} 项筛选` : "完整有效样本"}</small>
+      </div>
     </section>
   );
 }
@@ -895,46 +1054,33 @@ function SelectBox({ label, value, onChange, options }) {
 function Hero({ data, derived }) {
   return (
     <section className="hero-section" id="top">
-      <div className="hero-lens" aria-hidden="true">
-        <div className="lens-ring">
-          <span />
-          <span />
-          <span />
-        </div>
-        <div className="lens-stack">
-          <article>
-            <b>post</b>
-            <span>{derived.posts.length.toLocaleString()}</span>
-          </article>
-          <article>
-            <b>comment</b>
-            <span>{derived.comments.length.toLocaleString()}</span>
-          </article>
-          <article>
-            <b>risk signal</b>
-            <span>{derived.highRiskPosts.length.toLocaleString()}</span>
-          </article>
-        </div>
-        <div className="lens-thread">
-          <i />
-          <i />
-          <i />
-          <i />
-        </div>
-      </div>
+      <div className="hero-field"><GenerativeField /></div>
       <div className="hero-copy">
-        <p className="section-kicker">crawler text analytics · post-comment linked evidence</p>
-        <h1><span>看见</span>大学生把一句话交给 AI 之前的犹豫</h1>
+        <p className="section-kicker"><i /> AI · HUMAN COMMUNICATION STUDY</p>
+        <h1>当表达<br /><em>经过 AI</em></h1>
         <p>
-          这个平台把爬虫文本、评论区态度、风险边界和典型案例放到同一条分析链里，
-          用可解释的数据说明生成式 AI 如何进入恋爱咨询、聊天回复、道歉拒绝和正式沟通。
+          从一句“该怎么回”开始，观察生成式 AI 如何进入恋爱咨询、关系判断、道歉拒绝与正式沟通，
+          以及效率、真实感、隐私和依赖如何在评论区形成新的讨论边界。
         </p>
         <div className="source-strip">
-          <span>数据来源：微博、小红书公开文本</span>
-          <span>帖子 {data.meta.postCount.toLocaleString()} 条</span>
-          <span>评论 {data.meta.commentCount.toLocaleString()} 条</span>
-          <span>生成时间 {data.meta.generatedAt}</span>
+          <span>微博 × 小红书公开文本</span>
+          <span>帖子—评论关联分析</span>
+          <span>更新于 {data.meta.generatedAt}</span>
         </div>
+      </div>
+      <div className="hero-lens" aria-hidden="true">
+        <div className="lens-ring"><span /><span /><span /></div>
+        <div className="lens-core">
+          <small>RESEARCH LENS</small>
+          <strong>{derived.total.toLocaleString()}</strong>
+          <span>条关联文本</span>
+        </div>
+        <div className="lens-stack">
+          <article><b>POST</b><span>{derived.posts.length.toLocaleString()}</span></article>
+          <article><b>COMMENT</b><span>{derived.comments.length.toLocaleString()}</span></article>
+          <article><b>RISK SIGNAL</b><span>{derived.highRiskPosts.length.toLocaleString()}</span></article>
+        </div>
+        <div className="lens-thread">{Array.from({ length: 7 }).map((_, index) => <i key={index} />)}</div>
       </div>
       <div className="hero-kpis">
         {derived.metrics.map((item) => <KpiCard item={item} key={item.label} />)}
@@ -945,23 +1091,29 @@ function Hero({ data, derived }) {
 
 function OverviewSection({ data, derived }) {
   return (
-    <SectionFrame id="overview" label="数据总览" title="先确认样本结构，再解释图表结论" text="总览区把数据体量、来源结构、时间趋势、主题风险和关键词放在一起，避免只看单一图形造成误读。">
-      <div className="chart-grid">
-        <ChartPanel title="证据流向" unit="条" range="当前筛选" insight="场景、主题和风险的连接决定后续解释路径。" wide tall>
-          <EvidenceFlow rows={data.flows.sankey} />
-        </ChartPanel>
-        <ChartPanel title="讨论时间趋势" unit="帖子数" range="按月份" insight="时间线用于判断讨论是否集中爆发。">
-          <EChart option={timelineOption(derived.timeline)} />
-        </ChartPanel>
-        <ChartPanel title="平台来源占比" unit="帖子数" range="当前筛选" insight="不同平台提供不同语气和讨论密度。">
-          <EChart option={donutOption(derived.platform)} />
-        </ChartPanel>
-        <ChartPanel title="主题与风险面积" unit="共现次数" range="当前筛选" insight="面积越大，说明主题和风险绑定越强。">
-          <EChart option={treemapOption(derived.topicRisk)} />
-        </ChartPanel>
-        <ChartPanel title="Top 主题排行" unit="帖子数" range="前 10 类" insight="主题排行帮助确定报告主线。">
-          <EChart option={barOption(derived.topic)} />
-        </ChartPanel>
+    <SectionFrame id="overview" label="01 / 数据全景" title={`从 ${derived.total.toLocaleString()} 条文本中，看见表达被重新组织`} text="先读样本结构，再沿着场景、主题和风险的连接进入研究。每个图形都响应上方筛选条件。">
+      <div className="overview-composition">
+        <div className="overview-flow">
+          <ChartPanel title="场景—主题—风险路径谱" unit="共现次数" range="前 6 条显性风险路径" insight="以共享主题为桥梁，分别比较场景入口与显性风险的关联强度。" wide tall>
+            <EvidencePathways rows={data.flows.sankey} />
+          </ChartPanel>
+        </div>
+        <div className="overview-side">
+          <ChartPanel title="讨论时间脉络" unit="帖子数" range="按月份" insight="识别持续议题与短期聚集。">
+            <EChart option={timelineOption(derived.timeline)} />
+          </ChartPanel>
+          <ChartPanel title="样本从哪里来" unit="帖子数" range="当前筛选" insight="平台语境决定讨论的表达方式。">
+            <EChart option={donutOption(derived.platform, { centeredTotal: true })} />
+          </ChartPanel>
+        </div>
+        <div className="overview-pair">
+          <ChartPanel title="主题 × 显性风险矩阵" unit="共现次数" range="前 5 主题 × 前 5 风险" insight="排除“无明显风险”后，观察真正需要解释的风险绑定。">
+            <TopicRiskMatrix rows={derived.topicRisk} />
+          </ChartPanel>
+          <ChartPanel title="核心讨论主题" unit="帖子数" range="前 10 类" insight="排序决定后续报告的分析主线。">
+            <EChart option={barOption(derived.topic)} />
+          </ChartPanel>
+        </div>
       </div>
     </SectionFrame>
   );
@@ -974,9 +1126,11 @@ function MultiAnalysisSection({ data, derived }) {
     { key: "trend", label: "时间趋势", title: "讨论何时集中出现？" },
     { key: "category", label: "类别对比", title: "哪些场景和动机最突出？" },
     { key: "source", label: "来源分布", title: "平台语境如何影响讨论？" },
+    { key: "comment", label: "评论结构", title: "评论区如何补充、支持或质疑原帖？" },
     { key: "keyword", label: "关键词分析", title: "网感词如何进入讨论？" },
     { key: "heat", label: "热度排行", title: "高互动样本集中在哪？" },
     { key: "anomaly", label: "异常与边界", title: "哪些风险样本值得复核？" },
+    { key: "quality", label: "数据质量", title: "清洗和标签推断如何影响结论？" },
   ];
 
   useGSAP(() => {
@@ -985,11 +1139,12 @@ function MultiAnalysisSection({ data, derived }) {
   }, { scope: panelRef, dependencies: [tab], revertOnUpdate: true });
 
   return (
-    <SectionFrame id="analysis" label="多维分析" title="同一批数据，要从不同角度反复验证" text="切换不同维度时保留同一套筛选条件，便于观察结论是否稳定。">
+    <SectionFrame id="analysis" label="02 / 多维切片" title="一份数据，八种观察距离" text="时间、场景、平台、评论、语言、热度、风险与数据质量彼此校验，避免用单一图表替复杂的人际经验下结论。">
+      <div className="analysis-workbench">
       <div className="tabs" role="tablist" aria-label="多维分析维度">
-        {tabs.map((item) => (
-          <button key={item.key} role="tab" type="button" className={tab === item.key ? "active" : ""} onClick={() => setTab(item.key)}>
-            {item.label}
+        {tabs.map((item, index) => (
+          <button key={item.key} role="tab" type="button" aria-selected={tab === item.key} className={tab === item.key ? "active" : ""} onClick={() => setTab(item.key)}>
+            <small>{String(index + 1).padStart(2, "0")}</small><span>{item.label}</span>
           </button>
         ))}
       </div>
@@ -1025,6 +1180,19 @@ function MultiAnalysisSection({ data, derived }) {
             </ChartPanel>
           </div>
         )}
+        {tab === "comment" && (
+          <div className="comment-analysis tab-motion">
+            <ChartPanel title="评论作用分布" unit="评论数" range="当前筛选" insight="经验补充、支持、质疑和风险提醒承担不同讨论功能。">
+              <EChart option={barOption(derived.commentRole)} />
+            </ChartPanel>
+            <ChartPanel title="评论态度构成" unit="评论数" range="当前筛选" insight="态度比例以当前有效评论为分母。">
+              <EChart option={donutOption(derived.commentAttitude)} />
+            </ChartPanel>
+            <ChartPanel title="原帖主题 × 评论态度" unit="关联评论" range="排除中性观察" insight="同一主题下的支持、担忧和反对可能同时存在。" wide>
+              <EChart option={heatmapOption(derived.topicCommentAttitude)} className="large" />
+            </ChartPanel>
+          </div>
+        )}
         {tab === "keyword" && (
           <div className="analysis-feature tab-motion">
             <ChartPanel title="高频关键词气泡" unit="出现次数" range="Top 30" insight="词云只辅助发现热点，不能代替标签解释。">
@@ -1051,6 +1219,8 @@ function MultiAnalysisSection({ data, derived }) {
             </ChartPanel>
           </div>
         )}
+        {tab === "quality" && <DataQualityPanel data={data} derived={derived} />}
+      </div>
       </div>
     </SectionFrame>
   );
@@ -1058,10 +1228,10 @@ function MultiAnalysisSection({ data, derived }) {
 
 function ShowcaseSection({ derived }) {
   return (
-    <SectionFrame id="showcase" label="可视化亮点" title="把评论区看成围绕原帖展开的争议场" text="星图只保留读图所需的编码：主题、评论作用、态度和高互动证据，避免把解释文字堆成第二篇报告。">
+    <SectionFrame id="showcase" label="03 / 评论星系" title="每条评论，都是原帖周围的一次靠近或偏离" text="节点位置呈现主题归属，颜色区分态度，亮度提示互动强度。放大、拖动或点选，查看争议如何聚合。">
       <div className="showcase-stage">
         <div className="showcase-brief">
-          <p><strong>读图方式：</strong>节点越大代表关联越多，距离越近代表共同出现越频繁；点击节点后右侧只展示当前焦点和 3 条高互动证据。</p>
+          <p><strong>读图：</strong>越近，语义关联越强；越亮，互动越高。点击节点可追溯代表性评论。</p>
           <div className="showcase-metrics" aria-label="星图补充说明">
             <span>补判态度 <b>{Number(derived.triage.commentAttitudeInferred || 0).toLocaleString()}</b></span>
             <span>继承主题 <b>{Number(derived.triage.commentTopicInherited || 0).toLocaleString()}</b></span>
@@ -1071,6 +1241,57 @@ function ShowcaseSection({ derived }) {
         <CommentConstellation comments={derived.comments} />
       </div>
     </SectionFrame>
+  );
+}
+
+function DataQualityPanel({ data, derived }) {
+  const meta = data.meta || {};
+  const triage = meta.triage || {};
+  const postRetention = meta.rawPostCount ? (meta.postCount / meta.rawPostCount) * 100 : 0;
+  const commentRetention = meta.rawCommentCount ? (meta.commentCount / meta.rawCommentCount) * 100 : 0;
+  const inferenceRows = [
+    ["帖子主题补判", triage.postTopicInferred || 0, meta.postCount || 0],
+    ["帖子场景补判", triage.postSceneInferred || 0, meta.postCount || 0],
+    ["帖子态度补判", triage.postAttitudeInferred || 0, meta.postCount || 0],
+    ["评论作用补判", triage.commentRoleInferred || 0, meta.commentCount || 0],
+    ["评论态度补判", triage.commentAttitudeInferred || 0, meta.commentCount || 0],
+    ["评论主题继承", triage.commentTopicInherited || 0, meta.commentCount || 0],
+  ];
+  return (
+    <div className="quality-board tab-motion">
+      <div className="quality-retention">
+        <article>
+          <span>帖子清洗保留率</span>
+          <strong>{postRetention.toFixed(1)}%</strong>
+          <p>{formatNumber(meta.postCount)} / {formatNumber(meta.rawPostCount)} 条原始帖子进入有效样本</p>
+        </article>
+        <article>
+          <span>评论清洗保留率</span>
+          <strong>{commentRetention.toFixed(1)}%</strong>
+          <p>{formatNumber(meta.commentCount)} / {formatNumber(meta.rawCommentCount)} 条原始评论进入有效样本</p>
+        </article>
+        <article>
+          <span>当前筛选样本</span>
+          <strong>{formatNumber(derived.total)}</strong>
+          <p>{formatNumber(derived.posts.length)} 篇帖子与 {formatNumber(derived.comments.length)} 条评论</p>
+        </article>
+      </div>
+      <div className="quality-inference" aria-label="标签补判比例">
+        <header><h3>标签推断记录</h3><p>补判不是删除；这些记录保留来源字段，便于人工复核。</p></header>
+        {inferenceRows.map(([name, value, total]) => (
+          <div className="quality-row" key={name}>
+            <span>{name}</span>
+            <i><b style={{ width: `${total ? Math.min(100, (value / total) * 100) : 0}%` }} /></i>
+            <strong>{formatNumber(value)} / {formatNumber(total)}</strong>
+          </div>
+        ))}
+      </div>
+      <aside className="quality-method">
+        <strong>口径说明</strong>
+        <p>清洗保留率用于说明原始采集数据进入分析样本的比例；标签补判数量用于披露规则推断的影响范围，不等同于模型准确率。</p>
+        <p>涉及多标签字段的统计显示“标签命中次数”，可能高于文本数量；帖子与评论通过 parentPostId 保持关联。</p>
+      </aside>
+    </div>
   );
 }
 
@@ -1292,13 +1513,24 @@ function CommentConstellation({ comments }) {
                   <circle
                     key={point.id}
                     className={`galaxy-pixel ${point.hot ? "hot" : ""} ${selected && !active ? "dim" : ""} ${selected?.id === point.id ? "selected" : ""}`}
+                    role="button"
+                    tabIndex="0"
+                    aria-label={`${point.topic}，${point.role}，${point.attitude}，点赞 ${point.likes}`}
                     cx={point.x}
                     cy={point.y}
                     r={point.size}
                     fill={point.color}
                     onMouseEnter={() => setHovered(point)}
                     onMouseLeave={() => setHovered(null)}
+                    onFocus={() => setHovered(point)}
+                    onBlur={() => setHovered(null)}
                     onClick={() => setSelected(point)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelected(point);
+                      }
+                    }}
                   />
                 );
               })}
@@ -1401,7 +1633,7 @@ function DetailsSection({ derived }) {
   };
 
   return (
-    <SectionFrame id="details" label="数据明细" title="从图表回到具体文本证据" text="明细区保留搜索、排序、分页和导出，便于把图表结论追溯到帖子或评论样本。">
+    <SectionFrame id="details" label="04 / 证据档案" title="每个结论，都能回到一条具体文本" text="搜索、排序、分页和导出完整保留，让聚合图形随时可以回溯到帖子与评论原始证据。">
       <div className="table-shell reveal-card">
         <div className="table-tools">
           <div className="segmented">
@@ -1461,7 +1693,7 @@ function DetailsSection({ derived }) {
 
 function ConclusionsSection({ derived }) {
   return (
-    <SectionFrame id="conclusions" label="分析结论" title="把图表收束成可以写进报告的发现" text="结论卡只保留可由当前数据支撑的表述，每条都给出依据数据和解释。">
+    <SectionFrame id="conclusions" label="05 / 研究发现" title="AI 没有替代沟通，它改变了人们开口前的准备" text="以下判断均由当前样本支撑：它们是研究发现，也是继续追问人机关系的入口。">
       <div className="conclusion-grid">
         {derived.conclusions.map((item) => (
           <article className="conclusion-card reveal-card" key={item.title}>
@@ -1530,87 +1762,40 @@ function LoadingState() {
   return <main className="state-page"><div className="skeleton" /><div className="skeleton small" /></main>;
 }
 
-function ErrorState({ message }) {
-  return <main className="state-page"><ShieldAlert size={28} /><strong>数据无法加载</strong><span>{message}</span></main>;
+function ErrorState({ message, onRetry }) {
+  return <main className="state-page"><ShieldAlert size={28} /><strong>数据无法加载</strong><span>{message}</span><button type="button" onClick={onRetry}>重新加载</button></main>;
 }
 
 function App() {
-  const { data, error } = useDashboardData();
+  const { data, error, retry } = useDashboardData();
   const reduced = useReducedMotion();
   const shellRef = useRef(null);
   const [filters, setFilters] = useState({ platform: "all", topic: "all", scene: "all", risk: "all" });
   const [query, setQuery] = useState("");
   const filtered = useFilteredData(data, filters, query);
   const derived = useDerived(data, filtered);
+  const narrativeData = useMemo(() => {
+    if (!data || !filtered) return data;
+    return { ...data, records: { ...data.records, posts: filtered.posts, comments: filtered.comments } };
+  }, [data, filtered]);
 
   useGSAP(() => {
     if (!data || reduced) return undefined;
     const root = shellRef.current;
     if (!root) return undefined;
-    const intro = gsap.timeline({ defaults: { duration: 0.72, ease: "power4.out" } });
-    intro
-      .from(".site-header", { autoAlpha: 0, y: -18 })
-      .from(".hero-copy > *", { autoAlpha: 0, y: 28, stagger: 0.08 }, "<0.08")
-      .from(".hero-kpis .kpi-card", { autoAlpha: 0, y: 24, stagger: 0.07 }, "<0.16")
-      .from(".hero-lens", { autoAlpha: 0, scale: 0.88, rotate: -2 }, "<0.1")
-      .from(".lens-stack article", { autoAlpha: 0, y: 18, stagger: 0.08 }, "<0.12")
-      .from(".lens-thread i", { autoAlpha: 0, scale: 0.6, stagger: 0.05 }, "<0.1");
-
     gsap.to(".scroll-progress", {
       scaleX: 1,
       ease: "none",
       scrollTrigger: { trigger: document.documentElement, start: "top top", end: "bottom bottom", scrub: 0.35 },
     });
 
-    gsap.to(".hero-lens", {
-      y: 36,
-      scale: 1.06,
-      rotate: 2,
-      ease: "none",
-      scrollTrigger: { trigger: ".hero-section", start: "top top", end: "bottom top", scrub: 0.8 },
+    const bridgeTimeline = gsap.timeline({
+      scrollTrigger: { trigger: ".analysis-bridge", start: "top 78%", once: true },
     });
-    gsap.to(".lens-ring", {
-      rotate: 18,
-      ease: "none",
-      scrollTrigger: { trigger: ".hero-section", start: "top top", end: "bottom top", scrub: 1 },
-    });
-    gsap.to(".lens-stack article", {
-      yPercent: -18,
-      stagger: 0.08,
-      ease: "none",
-      scrollTrigger: { trigger: ".hero-section", start: "top top", end: "bottom top", scrub: 1.1 },
-    });
-    gsap.to(".section-frame", {
-      backgroundPosition: "55% 45%",
-      ease: "none",
-      scrollTrigger: { trigger: "main", start: "top top", end: "bottom bottom", scrub: 1.2 },
-    });
-    gsap.to(".ambient-shape", {
-      x: (index) => [24, -32, 18][index % 3],
-      y: (index) => [-18, 26, 20][index % 3],
-      rotation: (index) => [4, -5, 3][index % 3],
-      duration: 10,
-      repeat: -1,
-      yoyo: true,
-      ease: "sine.inOut",
-      stagger: 0.9,
-    });
-    gsap.to(".ambient-path", {
-      strokeDashoffset: -180,
-      duration: 18,
-      repeat: -1,
-      ease: "none",
-      stagger: 1.4,
-    });
-    gsap.to(".ambient-dot", {
-      y: -10,
-      autoAlpha: 0.42,
-      duration: 3.8,
-      repeat: -1,
-      yoyo: true,
-      ease: "sine.inOut",
-      stagger: { amount: 4, from: "random" },
-    });
+    bridgeTimeline
+      .fromTo(".analysis-bridge .bridge-line", { autoAlpha: 0, scale: 0.82 }, { autoAlpha: 1, scale: 1, duration: 0.8, stagger: 0.08, ease: "power3.out" })
+      .fromTo(".analysis-bridge .bridge-copy > *", { autoAlpha: 0, y: 20 }, { autoAlpha: 1, y: 0, duration: 0.55, stagger: 0.07, ease: "power3.out" }, "-=0.5")
+      .fromTo(".analysis-bridge .bridge-stat", { autoAlpha: 0, y: 16 }, { autoAlpha: 1, y: 0, duration: 0.45, stagger: 0.08, ease: "power3.out" }, "-=0.38");
 
     ScrollTrigger.batch(".reveal-card", {
       start: "top 86%",
@@ -1621,42 +1806,34 @@ function App() {
     return () => ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
   }, { scope: shellRef, dependencies: [data, reduced] });
 
-  if (error) return <ErrorState message={error} />;
+  if (error) return <ErrorState message={error} onRetry={retry} />;
   if (!data || !derived) return <LoadingState />;
+
+  const openAnalysis = (id = "workspace") => {
+    document.getElementById(id)?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+  };
 
   return (
     <div className="app-shell" ref={shellRef}>
-      <div className="ambient-layer" aria-hidden="true">
-        <i className="ambient-shape shape-one" />
-        <i className="ambient-shape shape-two" />
-        <i className="ambient-shape shape-three" />
-        <svg viewBox="0 0 1440 980" preserveAspectRatio="none">
-          <path className="ambient-path" d="M-80 210 C210 100 360 350 620 230 S1030 85 1510 190" />
-          <path className="ambient-path" d="M-100 650 C260 760 430 560 720 665 S1110 820 1510 610" />
-          <path className="ambient-path" d="M130 950 C300 730 480 790 680 610 S960 390 1340 470" />
-          {Array.from({ length: 18 }).map((_, index) => (
-            <circle key={index} className="ambient-dot" cx={90 + ((index * 83) % 1280)} cy={140 + ((index * 137) % 700)} r={index % 4 === 0 ? 2.4 : 1.5} />
-          ))}
-        </svg>
-      </div>
-      <a className="skip-link" href="#overview">跳到主要内容</a>
-      <header className="site-header">
-        <div className="scroll-progress" aria-hidden="true" />
-        <a href="#top" className="brand-mark">
-          <Sparkles size={18} />
-          <span>生产实习-人工智能应用场景分析</span>
-        </a>
-        <nav aria-label="页面导航">
-          <a href="#overview">总览</a>
-          <a href="#analysis">多维分析</a>
-          <a href="#showcase">可视化亮点</a>
-          <a href="#details">明细</a>
-          <a href="#conclusions">结论</a>
-        </nav>
-      </header>
-      <main>
-        <Hero data={data} derived={derived} />
-        <FilterBar data={data} filters={filters} setFilters={setFilters} query={query} setQuery={setQuery} />
+      <a className="skip-link" href="#workspace">跳到完整数据分析</a>
+      <NarrativeExperience data={narrativeData} onOpenAnalysis={openAnalysis} />
+      <AnalysisBridge derived={derived} onOpenAnalysis={openAnalysis} />
+      <main className="analysis-shell" id="workspace">
+        <header className="site-header">
+          <div className="scroll-progress" aria-hidden="true" />
+          <a href="#top" className="brand-mark">
+            <Sparkles size={18} />
+            <span>生产实习-人工智能应用场景分析</span>
+          </a>
+          <nav aria-label="数据分析导航">
+            <a href="#overview">数据全景</a>
+            <a href="#analysis">多维分析</a>
+            <a href="#showcase">评论星系</a>
+            <a href="#details">证据档案</a>
+            <a href="#conclusions">研究结论</a>
+          </nav>
+        </header>
+        <FilterBar data={data} derived={derived} filters={filters} setFilters={setFilters} query={query} setQuery={setQuery} />
         <OverviewSection data={data} derived={derived} />
         <MultiAnalysisSection data={data} derived={derived} />
         <ShowcaseSection derived={derived} />
